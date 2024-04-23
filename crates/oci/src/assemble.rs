@@ -19,7 +19,7 @@ pub struct OciImageAssembled {
     pub digest: String,
     pub descriptor: Descriptor,
     pub manifest: OciSchema<ImageManifest>,
-    pub config: OciSchema<ImageConfiguration>,
+    pub config: OciSchema<Option<ImageConfiguration>>,
     pub vfs: Arc<VfsTree>,
     pub tmp_dir: Option<PathBuf>,
 }

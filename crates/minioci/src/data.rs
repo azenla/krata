@@ -1,14 +1,14 @@
 use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
-pub struct OciSchema<T: Clone + Debug> {
+pub struct OciStruct<T: Clone + Debug> {
     raw: Vec<u8>,
     item: T,
 }
 
-impl<T: Clone + Debug> OciSchema<T> {
-    pub fn new(raw: Vec<u8>, item: T) -> OciSchema<T> {
-        OciSchema { raw, item }
+impl<T: Clone + Debug> OciStruct<T> {
+    pub fn new(raw: Vec<u8>, item: T) -> OciStruct<T> {
+        OciStruct { raw, item }
     }
 
     pub fn raw(&self) -> &[u8] {
@@ -31,14 +31,14 @@ impl<T: Clone + Debug> OciSchema<T> {
         (self.item, self.raw)
     }
 
-    pub fn erase<X: Clone + Debug>(self) -> OciSchema<Option<X>> {
-        OciSchema::new(self.into_raw(), None)
+    pub fn erase<X: Clone + Debug>(self) -> OciStruct<Option<X>> {
+        OciStruct::new(self.into_raw(), None)
     }
 }
 
-impl<T: Clone + Debug> Into<OciSchema<Option<T>>> for OciSchema<T> {
-    fn into(self) -> OciSchema<Option<T>> {
+impl<T: Clone + Debug> Into<OciStruct<Option<T>>> for OciStruct<T> {
+    fn into(self) -> OciStruct<Option<T>> {
         let (item, data) = self.split();
-        OciSchema::new(data, Some(item))
+        OciStruct::new(data, Some(item))
     }
 }

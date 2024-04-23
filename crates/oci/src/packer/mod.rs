@@ -42,7 +42,7 @@ pub struct OciPackedImage {
     pub path: PathBuf,
     pub format: OciPackedFormat,
     pub descriptor: Descriptor,
-    pub config: OciSchema<ImageConfiguration>,
+    pub config: OciSchema<Option<ImageConfiguration>>,
     pub manifest: OciSchema<ImageManifest>,
 }
 
@@ -53,7 +53,7 @@ impl OciPackedImage {
         path: PathBuf,
         format: OciPackedFormat,
         descriptor: Descriptor,
-        config: OciSchema<ImageConfiguration>,
+        config: OciSchema<Option<ImageConfiguration>>,
         manifest: OciSchema<ImageManifest>,
     ) -> OciPackedImage {
         OciPackedImage {

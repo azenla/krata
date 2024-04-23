@@ -1753,6 +1753,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
+name = "minioci"
+version = "0.0.9"
+dependencies = [
+ "anyhow",
+ "async-compression",
+ "async-trait",
+ "backhand",
+ "bytes",
+ "env_logger",
+ "indexmap 2.2.6",
+ "krata-tokio-tar",
+ "log",
+ "oci-spec",
+ "path-clean",
+ "regex",
+ "reqwest",
+ "scopeguard",
+ "serde",
+ "serde_json",
+ "sha256",
+ "tokio",
+ "tokio-stream",
+ "url",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

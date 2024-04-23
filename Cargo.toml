@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/krata",
+    "crates/minioci",
     "crates/oci",
     "crates/guest",
     "crates/runtime",
@@ -64,6 +65,7 @@ prost-types = "0.12.4"
 rand = "0.8.5"
 ratatui = "0.26.2"
 redb = "2.1.0"
+regex = "1.10.4"
 rtnetlink = "0.14.1"
 scopeguard = "1.2.0"
 serde_json = "1.0.116"

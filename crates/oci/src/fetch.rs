@@ -24,6 +24,7 @@ use oci_spec::image::{
     ToDockerV2S2,
 };
 use serde::de::DeserializeOwned;
+use serde_json::Value;
 use tokio::{
     fs::{self, File},
     io::{AsyncRead, AsyncReadExt, AsyncSeekExt, BufReader, BufWriter},
@@ -107,7 +108,7 @@ pub struct OciResolvedImage {
 #[derive(Clone, Debug)]
 pub struct OciLocalImage {
     pub image: OciResolvedImage,
-    pub config: OciSchema<ImageConfiguration>,
+    pub config: OciSchema<Option<ImageConfiguration>>,
     pub layers: Vec<OciImageLayer>,
 }
 
@@ -136,6 +137,22 @@ impl OciImageFetcher {
         self.load_seed_json(&want).await
     }
 
+    async fn load_seed_json_config(
+        &self,
+        descriptor: &Descriptor,
+    ) -> Result<Option<OciSchema<Option<ImageConfiguration>>>> {
+        let is_config_image_config = *descriptor.media_type() == MediaType::ImageConfig ||
+            descriptor.media_type().to_string() == MediaType::ImageConfig.to_docker_v2s2()?;
+        if is_config_image_config {
+            let Some(schema) = self.load_seed_json_blob::<ImageConfiguration>(descriptor).await? else {
+                return Ok(None);
+            };
+            Ok(Some(schema.into()))
+        } else {
+            Ok(self.load_seed_json_blob::<Value>(descriptor).await?.map(|x| x.erase::<ImageConfiguration>()))
+        }
+    }
+
     async fn load_seed_json<T: Clone + Debug + DeserializeOwned>(
         &self,
         want: &str,
@@ -143,7 +160,6 @@ impl OciImageFetcher {
         let Some(ref seed) = self.seed else {
             return Ok(None);
         };
-
         let file = File::open(seed).await?;
         let mut archive = Archive::new(file);
         let mut entries = archive.entries()?;
@@ -270,7 +286,7 @@ impl OciImageFetcher {
         image: &OciResolvedImage,
         layer_dir: &Path,
     ) -> Result<OciLocalImage> {
-        let config: OciSchema<ImageConfiguration>;
+        let config: OciSchema<Option<ImageConfiguration>>;
         self.progress
             .update(|progress| {
                 progress.phase = OciProgressPhase::ConfigDownload;
@@ -278,7 +294,7 @@ impl OciImageFetcher {
             .await;
         let mut client = OciRegistryClient::new(image.name.registry_url()?, self.platform.clone())?;
         if let Some(seeded) = self
-            .load_seed_json_blob::<ImageConfiguration>(image.manifest.item().config())
+            .load_seed_json_config(image.manifest.item().config())
             .await?
         {
             config = seeded;
@@ -286,10 +302,16 @@ impl OciImageFetcher {
             let config_bytes = client
                 .get_blob(&image.name.name, image.manifest.item().config())
                 .await?;
-            config = OciSchema::new(
-                config_bytes.to_vec(),
-                serde_json::from_slice(&config_bytes)?,
-            );
+
+            let is_config_image_config = *image.manifest.item().config().media_type() == MediaType::ImageConfig ||
+                image.manifest.item().config().media_type().to_string() == MediaType::ImageConfig.to_docker_v2s2()?;
+
+            config = if is_config_image_config {
+                let config = serde_json::from_slice::<ImageConfiguration>(&config_bytes)?;
+                OciSchema::new(config_bytes.to_vec(), Some(config))
+            } else {
+                OciSchema::new(config_bytes.to_vec(), None)
+            }
         }
         self.progress
             .update(|progress| {

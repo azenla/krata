@@ -7,8 +7,7 @@ use crate::{
 use anyhow::Result;
 use log::{debug, error};
 use oci_spec::image::{
-    Descriptor, ImageConfiguration, ImageIndex, ImageIndexBuilder, ImageManifest, MediaType,
-    ANNOTATION_REF_NAME,
+    Descriptor, ImageConfiguration, ImageIndex, ImageIndexBuilder, ImageManifest, MediaType, ToDockerV2S2, ANNOTATION_REF_NAME
 };
 use std::{
     path::{Path, PathBuf},
@@ -93,7 +92,13 @@ impl OciPackerCache {
                 let manifest_bytes = fs::read(&manifest_path).await?;
                 let manifest: ImageManifest = serde_json::from_slice(&manifest_bytes)?;
                 let config_bytes = fs::read(&config_path).await?;
-                let config: ImageConfiguration = serde_json::from_slice(&config_bytes)?;
+                let is_config_image_config = *manifest.config().media_type() == MediaType::ImageConfig ||
+                    manifest.config().media_type().to_string() == MediaType::ImageConfig.to_docker_v2s2()?;
+                let config: Option<ImageConfiguration> = if is_config_image_config {
+                    serde_json::from_slice(&config_bytes)?
+                } else {
+                    None
+                };
                 debug!("cache hit digest={}", digest);
                 Ok(Some(OciPackedImage::new(
                     name,
