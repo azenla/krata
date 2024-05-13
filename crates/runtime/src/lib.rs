@@ -5,7 +5,7 @@ use ipnetwork::IpNetwork;
 use loopdev::LoopControl;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
-use xenclient::{x86pv::X86PvPlatform, XenClient};
+use xenclient::{x86pvh::X86PvhPlatform, XenClient};
 use xenstore::{XsdClient, XsdInterface};
 
 use self::{
@@ -17,6 +17,8 @@ pub mod autoloop;
 pub mod cfgblk;
 pub mod channel;
 pub mod launch;
+
+type RuntimePlatform = X86PvhPlatform;
 
 pub struct GuestLoopInfo {
     pub device: String,
@@ -46,12 +48,12 @@ pub struct GuestInfo {
 #[derive(Clone)]
 pub struct RuntimeContext {
     pub autoloop: AutoLoop,
-    pub xen: XenClient<X86PvPlatform>,
+    pub xen: XenClient<RuntimePlatform>,
 }
 
 impl RuntimeContext {
     pub async fn new() -> Result<Self> {
-        let xen = XenClient::new(0, X86PvPlatform::new()).await?;
+        let xen = XenClient::new(0, RuntimePlatform::new()).await?;
         Ok(RuntimeContext {
             autoloop: AutoLoop::new(LoopControl::open()?),
             xen,

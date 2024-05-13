@@ -146,7 +146,9 @@ impl GuestLauncher {
             None
         };
         let cmdline_options = [
-            if request.debug { "debug" } else { "quiet" },
+            "earlycon=xen,keep",
+            "earlyprintk=xen,keep",
+            "debug",
             "elevator=noop",
         ];
         let cmdline = cmdline_options.join(" ");
