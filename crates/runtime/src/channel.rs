@@ -315,7 +315,10 @@ impl KrataChannelBackendProcessor {
         let owned = self.clone();
         Ok(tokio::task::spawn(async move {
             if let Err(error) = owned.processor(output_sender, input_receiver).await {
-                error!("failed to process krata channel: {}", error);
+                error!(
+                    "failed to process krata channel for backend {}: {}",
+                    owned.backend, error
+                );
             }
             let _ = owned
                 .store

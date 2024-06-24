@@ -6,7 +6,7 @@ use xenclient::{DomainConfig, XenClient};
 use xenplatform::domain::BaseDomainConfig;
 
 #[cfg(target_arch = "x86_64")]
-type RuntimePlatform = xenplatform::x86pv::X86PvPlatform;
+type RuntimePlatform = xenplatform::x86::pv::X86PvPlatform;
 
 #[cfg(not(target_arch = "x86_64"))]
 type RuntimePlatform = xenplatform::unsupported::UnsupportedPlatform;

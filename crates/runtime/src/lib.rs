@@ -22,7 +22,7 @@ pub mod ip;
 pub mod launch;
 
 #[cfg(target_arch = "x86_64")]
-type RuntimePlatform = xenplatform::x86pv::X86PvPlatform;
+type RuntimePlatform = xenplatform::x86::pvh::X86PvhPlatform;
 
 #[cfg(not(target_arch = "x86_64"))]
 type RuntimePlatform = xenplatform::unsupported::UnsupportedPlatform;
