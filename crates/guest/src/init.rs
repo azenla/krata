@@ -166,6 +166,9 @@ impl GuestInit {
             None,
         )
         .await?;
+        self.create_dir("/krata", Some(0o0755)).await?;
+        self.mount_kernel_fs("9p", "/krata", "", None, Some("kratafs"))
+            .await?;
         Ok(())
     }
 

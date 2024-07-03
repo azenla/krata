@@ -19,6 +19,7 @@ use self::{
 pub mod autoloop;
 pub mod cfgblk;
 pub mod channel;
+pub mod fs9p;
 pub mod ip;
 pub mod launch;
 pub mod power;

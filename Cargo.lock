@@ -1543,6 +1543,7 @@ name = "krata-runtime"
 version = "0.0.11"
 dependencies = [
  "anyhow",
+ "async-trait",
  "backhand",
  "env_logger",
  "indexmap 2.2.6",
@@ -1558,6 +1559,7 @@ dependencies = [
  "krata-xenplatform",
  "krata-xenstore",
  "log",
+ "scopeguard",
  "serde_json",
  "tokio",
  "uuid",

@@ -11,7 +11,10 @@ use glt::GuestLookupTable;
 use idm::{DaemonIdm, DaemonIdmHandle};
 use krata::{dial::ControlDialAddress, v1::control::control_service_server::ControlServiceServer};
 use krataoci::{packer::service::OciPackerService, registry::OciPlatform};
-use kratart::Runtime;
+use kratart::{
+    fs9p::{Fs9pRequestHandler, Fs9pService},
+    Runtime,
+};
 use log::info;
 use reconcile::guest::GuestReconciler;
 use tokio::{
@@ -49,11 +52,22 @@ pub struct Daemon {
     generator_task: JoinHandle<()>,
     idm: DaemonIdmHandle,
     console: DaemonConsoleHandle,
+    fs: JoinHandle<()>,
     packer: OciPackerService,
     runtime: Runtime,
 }
 
 const GUEST_RECONCILER_QUEUE_LEN: usize = 1000;
+
+#[derive(Clone)]
+pub struct KrataFsHandler;
+
+#[async_trait::async_trait]
+impl Fs9pRequestHandler for KrataFsHandler {
+    async fn handle(&self, _domid: u32, _request: Vec<u8>) -> Result<Vec<u8>> {
+        Err(anyhow!("unimplemented"))
+    }
+}
 
 impl Daemon {
     pub async fn new(store: String) -> Result<Self> {
@@ -109,6 +123,9 @@ impl Daemon {
             DaemonEventGenerator::new(guests.clone(), guest_reconciler_notify.clone(), idm.clone())
                 .await?;
         let runtime_for_reconciler = runtime.dupe().await?;
+        let fs = Fs9pService::new(KrataFsHandler {}).await?;
+        let fs = fs.launch().await?;
+
         let guest_reconciler = GuestReconciler::new(
             devices.clone(),
             glt.clone(),
@@ -145,6 +162,7 @@ impl Daemon {
             generator_task,
             idm,
             console,
+            fs,
             packer,
             runtime,
         })
@@ -215,6 +233,7 @@ impl Drop for Daemon {
     fn drop(&mut self) {
         self.guest_reconciler_task.abort();
         self.generator_task.abort();
+        self.fs.abort();
     }
 }
 

@@ -196,7 +196,7 @@ impl GuestStarter<'_> {
                     .map(|x| (x.key.clone(), x.value.clone()))
                     .collect::<HashMap<_, _>>(),
                 run: empty_vec_optional(task.command.clone()),
-                debug: false,
+                debug: true,
                 addons_image: Some(self.addons_path.to_path_buf()),
             })
             .await?;

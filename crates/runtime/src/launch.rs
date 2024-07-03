@@ -14,7 +14,9 @@ use krata::launchcfg::{
 use krataoci::packer::OciPackedImage;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
-use xenclient::{DomainChannel, DomainConfig, DomainDisk, DomainNetworkInterface};
+use xenclient::{
+    DomainChannel, DomainConfig, DomainDisk, DomainFilesystem, DomainNetworkInterface,
+};
 use xenplatform::domain::BaseDomainConfig;
 
 use crate::cfgblk::ConfigBlock;
@@ -246,7 +248,10 @@ impl GuestLauncher {
                 script: None,
             }],
             pcis: request.pcis.clone(),
-            filesystems: vec![],
+            filesystems: vec![DomainFilesystem {
+                path: "kratafs".to_string(),
+                tag: "kratafs".to_string(),
+            }],
             extra_keys,
             extra_rw_paths: vec!["krata/guest".to_string()],
         };
