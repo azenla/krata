@@ -46,7 +46,6 @@ pub struct ZoneInfo {
     pub name: Option<String>,
     pub uuid: Uuid,
     pub domid: u32,
-    pub image: String,
     pub loops: Vec<ZoneLoopInfo>,
     pub zone_ipv4: Option<IpNetwork>,
     pub zone_ipv6: Option<IpNetwork>,
@@ -104,12 +103,6 @@ impl RuntimeContext {
                 .read_string(&format!("{}/krata/name", &dom_path))
                 .await?;
 
-            let image = self
-                .xen
-                .store
-                .read_string(&format!("{}/krata/image", &dom_path))
-                .await?
-                .unwrap_or("unknown".to_string());
             let loops = self
                 .xen
                 .store
@@ -188,7 +181,6 @@ impl RuntimeContext {
                 name,
                 uuid,
                 domid,
-                image,
                 loops,
                 zone_ipv4,
                 zone_ipv6,

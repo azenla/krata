@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum LaunchPackedFormat {
+pub enum LaunchImageFormat {
     Squashfs,
     Erofs,
+    Directory,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -35,7 +36,8 @@ pub struct LaunchNetwork {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LaunchRoot {
-    pub format: LaunchPackedFormat,
+    pub format: LaunchImageFormat,
+    pub directory: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

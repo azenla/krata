@@ -6,7 +6,7 @@ use krata::{
     events::EventStream,
     v1::{
         common::{
-            zone_image_spec::Image, OciImageFormat, ZoneImageSpec, ZoneOciImageSpec, ZoneSpec,
+            zone_image_spec::Image, OciImageFormat, ZoneImageSpec, ZoneDirectorySpec, ZoneOciImageSpec, ZoneSpec,
             ZoneSpecDevice, ZoneStatus, ZoneTaskSpec, ZoneTaskSpecEnvVar,
         },
         control::{
@@ -83,16 +83,16 @@ impl ZoneLaunchCommand {
         mut client: ControlServiceClient<Channel>,
         events: EventStream,
     ) -> Result<()> {
-        let image = self
-            .pull_image(
-                &mut client,
-                &self.oci,
-                match self.image_format {
-                    LaunchImageFormat::Squashfs => OciImageFormat::Squashfs,
-                    LaunchImageFormat::Erofs => OciImageFormat::Erofs,
-                },
-            )
-            .await?;
+        // let image = self
+        //     .pull_image(
+        //         &mut client,
+        //         &self.oci,
+        //         match self.image_format {
+        //             LaunchImageFormat::Squashfs => OciImageFormat::Squashfs,
+        //             LaunchImageFormat::Erofs => OciImageFormat::Erofs,
+        //         },
+        //     )
+        //     .await?;
 
         let kernel = if let Some(ref kernel) = self.kernel {
             let kernel_image = self
@@ -115,7 +115,11 @@ impl ZoneLaunchCommand {
         let request = CreateZoneRequest {
             spec: Some(ZoneSpec {
                 name: self.name.unwrap_or_default(),
-                image: Some(image),
+                image: Some(ZoneImageSpec {
+                    image: Some(Image::Directory(ZoneDirectorySpec {
+                        path: "/".to_string(),
+                    }))
+                }),
                 kernel,
                 initrd,
                 vcpus: self.cpus,

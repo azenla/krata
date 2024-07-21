@@ -5,7 +5,7 @@ use ipnetwork::IpNetwork;
 use krata::ethtool::EthtoolHandle;
 use krata::idm::client::IdmInternalClient;
 use krata::idm::internal::INTERNAL_IDM_CHANNEL;
-use krata::launchcfg::{LaunchInfo, LaunchNetwork, LaunchPackedFormat};
+use krata::launchcfg::{LaunchInfo, LaunchNetwork, LaunchImageFormat, LaunchRoot};
 use libc::{sethostname, setsid, TIOCSCTTY};
 use log::{trace, warn};
 use nix::ioctl_write_int_bad;
@@ -91,7 +91,7 @@ impl ZoneInit {
         let config = self.parse_image_config().await?;
         let launch = self.parse_launch_config().await?;
 
-        self.mount_root_image(launch.root.format.clone()).await?;
+        self.mount_root_image(launch.root.clone()).await?;
 
         self.mount_addons().await?;
 
@@ -177,7 +177,7 @@ impl ZoneInit {
         self.mount_image(
             &PathBuf::from(ADDONS_DEVICE_PATH),
             &PathBuf::from(ADDONS_MOUNT_PATH),
-            LaunchPackedFormat::Squashfs,
+            LaunchImageFormat::Squashfs,
         )
         .await?;
         Ok(())
@@ -247,17 +247,26 @@ impl ZoneInit {
         self.mount_image(
             Path::new(CONFIG_BLOCK_DEVICE_PATH),
             config_mount_path,
-            LaunchPackedFormat::Squashfs,
+            LaunchImageFormat::Squashfs,
         )
         .await?;
         Ok(())
     }
 
-    async fn mount_root_image(&mut self, format: LaunchPackedFormat) -> Result<()> {
+    async fn mount_root_image(&mut self, root: LaunchRoot) -> Result<()> {
         trace!("mounting root image");
         let image_mount_path = Path::new(IMAGE_MOUNT_PATH);
-        self.mount_image(Path::new(IMAGE_BLOCK_DEVICE_PATH), image_mount_path, format)
-            .await?;
+        match root.format {
+            LaunchImageFormat::Squashfs | LaunchImageFormat::Erofs => {
+                self.mount_image(Path::new(IMAGE_BLOCK_DEVICE_PATH), image_mount_path, root.format)
+                    .await?;
+            }
+            LaunchImageFormat::Directory => {
+                if let Some(ref directory) = root.directory {
+                    self.mount_9p_filesystem(directory, image_mount_path).await?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -265,7 +274,7 @@ impl ZoneInit {
         &mut self,
         from: &Path,
         to: &Path,
-        format: LaunchPackedFormat,
+        format: LaunchImageFormat,
     ) -> Result<()> {
         trace!("mounting {:?} image {:?} to {:?}", format, from, to);
         if !to.is_dir() {
@@ -273,11 +282,30 @@ impl ZoneInit {
         }
         Mount::builder()
             .fstype(FilesystemType::Manual(match format {
-                LaunchPackedFormat::Squashfs => "squashfs",
-                LaunchPackedFormat::Erofs => "erofs",
+                LaunchImageFormat::Squashfs => "squashfs",
+                LaunchImageFormat::Erofs => "erofs",
+                _ => {
+                    return Err(anyhow!("invalid format"));
+                }
             }))
             .flags(MountFlags::RDONLY)
             .mount(from, to)?;
+        Ok(())
+    }
+
+    async fn mount_9p_filesystem(
+        &mut self,
+        name: &str,
+        to: &Path,
+    ) -> Result<()> {
+        trace!("mounting 9pfs {:?} to {:?}", name, to);
+        if !to.is_dir() {
+            fs::create_dir(to).await?;
+        }
+        Mount::builder()
+            .fstype(FilesystemType::Manual("9p"))
+            .flags(MountFlags::RDONLY)
+            .mount(PathBuf::from("Xen"), to)?;
         Ok(())
     }
 
@@ -337,9 +365,13 @@ impl ZoneInit {
 
     async fn parse_image_config(&mut self) -> Result<ImageConfiguration> {
         let image_config_path = Path::new(IMAGE_CONFIG_JSON_PATH);
-        let content = fs::read_to_string(image_config_path).await?;
-        let config = serde_json::from_str(&content)?;
-        Ok(config)
+        if fs::try_exists(image_config_path).await? {
+            let content = fs::read_to_string(image_config_path).await?;
+            let config = serde_json::from_str(&content)?;
+            Ok(config)
+        } else {
+            Ok(ImageConfiguration::default())
+        }
     }
 
     async fn parse_launch_config(&mut self) -> Result<LaunchInfo> {

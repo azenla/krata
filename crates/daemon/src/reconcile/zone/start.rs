@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
-use krata::launchcfg::LaunchPackedFormat;
+use krata::launchcfg::LaunchImageFormat;
 use krata::v1::common::ZoneOciImageSpec;
 use krata::v1::common::{OciImageFormat, Zone, ZoneState, ZoneStatus};
 use krataoci::packer::{service::OciPackerService, OciPackedFormat};
@@ -84,33 +84,31 @@ impl ZoneStarter<'_> {
             return Err(anyhow!("image spec not provided"));
         };
         let oci = match image.image {
-            Some(Image::Oci(ref oci)) => oci,
+            Some(Image::Oci(ref oci)) => Some(oci),
+            Some(Image::Directory(_)) => None,
             None => {
-                return Err(anyhow!("oci spec not specified"));
+                return Err(anyhow!("image spec not specified"));
             }
         };
         let task = spec.task.as_ref().cloned().unwrap_or_default();
 
-        let image = self
-            .packer
-            .recall(
-                &oci.digest,
-                match oci.format() {
-                    OciImageFormat::Unknown => OciPackedFormat::Squashfs,
-                    OciImageFormat::Squashfs => OciPackedFormat::Squashfs,
-                    OciImageFormat::Erofs => OciPackedFormat::Erofs,
-                    OciImageFormat::Tar => {
-                        return Err(anyhow!("tar image format is not supported for zones"));
-                    }
-                },
-            )
-            .await?;
-
-        let Some(image) = image else {
-            return Err(anyhow!(
-                "image {} in the requested format did not exist",
-                oci.digest
-            ));
+        let image = if let Some(oci) = oci {
+            self
+                .packer
+                .recall(
+                    &oci.digest,
+                    match oci.format() {
+                        OciImageFormat::Unknown => OciPackedFormat::Squashfs,
+                        OciImageFormat::Squashfs => OciPackedFormat::Squashfs,
+                        OciImageFormat::Erofs => OciPackedFormat::Erofs,
+                        OciImageFormat::Tar => {
+                            return Err(anyhow!("tar image format is not supported for zones"));
+                        }
+                    },
+                )
+                .await?
+        } else {
+            None
         };
 
         let kernel = if let Some(ref spec) = spec.kernel {
@@ -174,10 +172,15 @@ impl ZoneStarter<'_> {
             }
         }
 
+        let directory = match spec.image.clone().unwrap_or_default().image {
+            Some(Image::Directory(directory)) => Some(directory.path.clone()),
+            _ => None,
+        };
+
         let info = self
             .runtime
             .launch(ZoneLaunchRequest {
-                format: LaunchPackedFormat::Squashfs,
+                format: LaunchImageFormat::Squashfs,
                 uuid: Some(uuid),
                 name: if spec.name.is_empty() {
                     None
@@ -185,6 +188,7 @@ impl ZoneStarter<'_> {
                     Some(spec.name.clone())
                 },
                 image,
+                directory,
                 kernel,
                 initrd,
                 vcpus: spec.vcpus,
@@ -196,7 +200,7 @@ impl ZoneStarter<'_> {
                     .map(|x| (x.key.clone(), x.value.clone()))
                     .collect::<HashMap<_, _>>(),
                 run: empty_vec_optional(task.command.clone()),
-                debug: false,
+                debug: true,
                 addons_image: Some(self.addons_path.to_path_buf()),
             })
             .await?;

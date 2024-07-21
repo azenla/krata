@@ -9,12 +9,12 @@ use anyhow::{anyhow, Result};
 use ipnetwork::IpNetwork;
 use krata::launchcfg::{
     LaunchInfo, LaunchNetwork, LaunchNetworkIpv4, LaunchNetworkIpv6, LaunchNetworkResolver,
-    LaunchPackedFormat, LaunchRoot,
+    LaunchImageFormat, LaunchRoot,
 };
 use krataoci::packer::OciPackedImage;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
-use xenclient::{DomainChannel, DomainConfig, DomainDisk, DomainNetworkInterface};
+use xenclient::{DomainChannel, DomainConfig, DomainDisk, DomainFilesystem, DomainNetworkInterface};
 use xenplatform::domain::BaseDomainConfig;
 
 use crate::cfgblk::ConfigBlock;
@@ -27,7 +27,7 @@ pub use xenclient::{
 };
 
 pub struct ZoneLaunchRequest {
-    pub format: LaunchPackedFormat,
+    pub format: LaunchImageFormat,
     pub kernel: Vec<u8>,
     pub initrd: Vec<u8>,
     pub uuid: Option<Uuid>,
@@ -38,7 +38,8 @@ pub struct ZoneLaunchRequest {
     pub run: Option<Vec<String>>,
     pub pcis: Vec<PciDevice>,
     pub debug: bool,
-    pub image: OciPackedImage,
+    pub image: Option<OciPackedImage>,
+    pub directory: Option<String>,
     pub addons_image: Option<PathBuf>,
 }
 
@@ -70,6 +71,7 @@ impl ZoneLauncher {
         let launch_config = LaunchInfo {
             root: LaunchRoot {
                 format: request.format.clone(),
+                directory: request.directory.clone(),
             },
             hostname: Some(
                 request
@@ -106,11 +108,14 @@ impl ZoneLauncher {
         let cfgblk_dir = cfgblk.dir.clone();
         tokio::task::spawn_blocking(move || cfgblk.build(&launch_config)).await??;
 
-        let image_squashfs_path = request
-            .image
-            .path
-            .to_str()
-            .ok_or_else(|| anyhow!("failed to convert image path to string"))?;
+        let image_squashfs_path = if let Some(ref image) = request.image {
+            Some(image
+                .path
+                .to_str()
+                .ok_or_else(|| anyhow!("failed to convert image path to string"))?)
+        } else {
+            None
+        };
 
         let cfgblk_dir_path = cfgblk_dir
             .to_str()
@@ -132,7 +137,11 @@ impl ZoneLauncher {
             None
         };
 
-        let image_squashfs_loop = context.autoloop.loopify(image_squashfs_path)?;
+        let image_squashfs_loop = if let Some(ref image_squashfs_path) = image_squashfs_path {
+            Some(context.autoloop.loopify(image_squashfs_path)?)
+        } else {
+            None
+        };
         let cfgblk_squashfs_loop = context.autoloop.loopify(cfgblk_squashfs_path)?;
         let addons_squashfs_loop = if let Some(ref addons_squashfs_path) = addons_squashfs_path {
             Some(context.autoloop.loopify(addons_squashfs_path)?)
@@ -150,16 +159,19 @@ impl ZoneLauncher {
 
         let mut disks = vec![
             DomainDisk {
-                vdev: "xvda".to_string(),
-                block: image_squashfs_loop.clone(),
-                writable: false,
-            },
-            DomainDisk {
                 vdev: "xvdb".to_string(),
                 block: cfgblk_squashfs_loop.clone(),
                 writable: false,
             },
         ];
+
+        if let Some(ref image_squashfs_loop) = image_squashfs_loop {
+            disks.insert(0,DomainDisk {
+                vdev: "xvda".to_string(),
+                block: image_squashfs_loop.clone(),
+                writable: false,
+            });
+        }
 
         if let Some(ref addons) = addons_squashfs_loop {
             disks.push(DomainDisk {
@@ -170,12 +182,15 @@ impl ZoneLauncher {
         }
 
         let mut loops = vec![
-            format!("{}:{}:none", image_squashfs_loop.path, image_squashfs_path),
             format!(
                 "{}:{}:{}",
                 cfgblk_squashfs_loop.path, cfgblk_squashfs_path, cfgblk_dir_path
             ),
         ];
+
+        if let Some(ref image_squashfs_loop) = image_squashfs_loop {
+            loops.insert(0, format!("{}:{}:none", image_squashfs_loop.path, image_squashfs_path.unwrap_or_default()));
+        }
 
         if let Some(ref addons) = addons_squashfs_loop {
             loops.push(format!(
@@ -220,6 +235,14 @@ impl ZoneLauncher {
             extra_keys.push(("krata/name".to_string(), name.clone()));
         }
 
+        let mut filesystems = vec![];
+        if let Some(ref directory) = request.directory {
+            filesystems.push(DomainFilesystem {
+                path: directory.clone(),
+                tag: "root".to_string(),
+            });
+        }
+
         let config = DomainConfig {
             base: BaseDomainConfig {
                 max_vcpus: request.vcpus,
@@ -246,7 +269,7 @@ impl ZoneLauncher {
                 script: None,
             }],
             pcis: request.pcis.clone(),
-            filesystems: vec![],
+            filesystems,
             extra_keys,
             extra_rw_paths: vec!["krata/zone".to_string()],
         };
@@ -257,7 +280,6 @@ impl ZoneLauncher {
                     name: request.name.as_ref().map(|x| x.to_string()),
                     uuid,
                     domid: created.domid,
-                    image: request.image.digest,
                     loops: vec![],
                     zone_ipv4: Some(IpNetwork::new(IpAddr::V4(ip.ipv4), ip.ipv4_prefix)?),
                     zone_ipv6: Some(IpNetwork::new(IpAddr::V6(ip.ipv6), ip.ipv6_prefix)?),
@@ -275,7 +297,9 @@ impl ZoneLauncher {
                 })
             }
             Err(error) => {
-                let _ = context.autoloop.unloop(&image_squashfs_loop.path).await;
+                if let Some(ref image_squashfs_loop) = image_squashfs_loop {
+                    let _ = context.autoloop.unloop(&image_squashfs_loop.path).await;
+                }
                 let _ = context.autoloop.unloop(&cfgblk_squashfs_loop.path).await;
                 let _ = fs::remove_dir(&cfgblk_dir);
                 Err(error.into())

@@ -239,7 +239,11 @@ impl ClientTransaction {
         let backend_path = format!(
             "{}/backend/{}/{}/{}",
             self.backend_dom_path,
-            typ.as_ref(),
+            if typ.as_ref() == "9pfs" {
+                "xen_9pfs"
+            } else {
+                typ.as_ref()
+            },
             self.domid,
             id
         );
@@ -369,7 +373,7 @@ impl ClientTransaction {
             ("online", "1".to_string()),
             ("state", "1".to_string()),
             ("path", filesystem.path.to_string()),
-            ("security-model", "none".to_string()),
+            ("security_model", "none".to_string()),
         ];
 
         let frontend_items: Vec<(&str, String)> = vec![
